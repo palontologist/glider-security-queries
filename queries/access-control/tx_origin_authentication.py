@@ -22,19 +22,10 @@ def query():
 
 def is_authentication_check(inst):
     """Check if tx.origin is used in an authentication/authorization context"""
-    # Check for comparison operations
     code_str = str(inst)
     
-    # Direct comparisons: tx.origin == owner, tx.origin != owner, etc.
-    auth_patterns = [
-        "tx.origin ==",
-        "tx.origin !=",
-        "tx.origin =",
-        "tx.origin <",
-        "tx.origin >",
-    ]
-    
-    if any(pattern in code_str for pattern in auth_patterns):
+    # Check if it's a comparison/assignment involving tx.origin
+    if any(op in code_str for op in ["==", "!=", "=", "<", ">"]):
         return True
     
     # Check if used in require/assert condition
@@ -45,10 +36,10 @@ def is_authentication_check(inst):
     if inst.is_if():
         return True
     
-    # Check if assigned to state variable (owner = tx.origin)
+    # Check if assigned to state variable
     if inst.is_storage_write():
         for var in inst.vars_written():
-            if "owner" in var.name.lower() or "admin" in var.name.lower() or "auth" in var.name.lower():
+            if any(kw in var.name.lower() for kw in ["owner", "admin", "auth"]):
                 return True
     
     return False
@@ -57,18 +48,17 @@ def is_authentication_check(inst):
 def not_in_constructor(inst):
     """Filter out constructor usage (sometimes acceptable)"""
     func = inst.get_parent()
-    return func is not None and func.is_constructor() is False
+    return func is not None and not func.is_constructor()
 
 
-def query_msg_sender_usage():
+def query_simple():
     """
-    @title: Prefer msg.sender over tx.origin
-    @description: Finds contracts using tx.origin where msg.sender should be used
-    @tags: tx-origin, msg-sender, best-practice
+    @title: Simple tx.origin detection
+    @description: Finds any use of tx.origin in contracts
+    @tags: tx-origin
     """
     return (
         Instructions()
         .exec()
         .filter(lambda i: "tx.origin" in str(i))
-        .filter(lambda i: "msg.sender" not in str(i))  # Only flag if msg.sender NOT also used
     )
