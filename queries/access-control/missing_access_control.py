@@ -24,10 +24,10 @@ def query():
 
     return (
         Instructions()
-        .exec()  # Get all instructions
+        .filter(lambda i: i.is_storage_write())  # Start with state changes only
         .filter(lambda i: i.get_parent() is not None)  # Has parent function
         .filter(lambda i: any(sensitive in i.get_parent().name for sensitive in sensitive_functions))
-        .filter(lambda i: i.is_storage_write())  # State-changing instructions
+        .exec()
         .filter(missing_access_control)
     )
 
@@ -35,26 +35,22 @@ def query():
 def missing_access_control(inst):
     """Check if function lacks proper access control"""
     func = inst.get_parent()
-    modifiers = [m.name for m in func.modifiers()]
     
-    # Common access control modifiers
-    access_modifiers = [
-        "onlyOwner", "onlyAdmin", "onlyRole", "onlyGovernance",
-        "onlyGuardian", "onlyPauser", "onlyUpgrader",
-        "authorized", "restricted", "authenticated"
-    ]
+    # Quick check: modifiers first (fastest)
+    for m in func.modifiers():
+        name = m.name
+        if any(am in name for am in ["onlyOwner", "onlyAdmin", "onlyRole", "onlyGovernance",
+                                      "onlyGuardian", "onlyPauser", "onlyUpgrader",
+                                      "authorized", "restricted", "authenticated"]):
+            return False  # Has access control modifier
     
-    has_modifier = any(any(am in m for am in access_modifiers) for m in modifiers)
-    
-    # Check for inline require checks
-    has_inline_check = False
+    # Check for inline require/if checks - only scan function once
     for fn_inst in func.instructions().exec():
-        if fn_inst.is_if() or "require" in fn_inst.callee_names():
-            # Check if condition involves msg.sender and owner/admin
+        if "require" in fn_inst.callee_names() or "assert" in fn_inst.callee_names() or fn_inst.is_if():
             for var in fn_inst.vars_read():
-                if "owner" in var.name.lower() or "admin" in var.name.lower() or "role" in var.name.lower():
-                    if "msg.sender" in str(fn_inst) or "sender" in var.name.lower():
-                        has_inline_check = True
-                        break
+                vname = var.name.lower()
+                if ("owner" in vname or "admin" in vname or "role" in vname) and \
+                   ("msg.sender" in str(fn_inst) or "sender" in vname):
+                    return False  # Has inline authorization check
     
-    return not (has_modifier or has_inline_check)
+    return True  # No access control found

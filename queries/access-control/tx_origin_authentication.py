@@ -13,8 +13,8 @@ def query():
 
     return (
         Instructions()
+        .filter(lambda i: "tx.origin" in str(i))  # Filter first, then exec
         .exec()
-        .filter(lambda i: "tx.origin" in str(i))
         .filter(is_authentication_check)
         .filter(not_in_constructor)
     )
