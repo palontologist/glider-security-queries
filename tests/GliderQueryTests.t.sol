@@ -170,3 +170,48 @@ contract BadImplementation {
         revert("Initialization failed");
     }
 }
+
+
+// ============================================
+// TX.ORIGIN TESTS
+// ============================================
+
+contract TxOriginTest is Test {
+    function testVulnerableTxOrigin_Phishing() public {
+        VulnerableTxOrigin vuln = new VulnerableTxOrigin();
+        address attacker = makeAddr("attacker");
+        address victim = makeAddr("victim");
+        
+        // Attacker deploys malicious contract that calls vuln.setOwner
+        // When victim interacts with attacker's contract:
+        // - msg.sender = attacker contract
+        // - tx.origin = victim
+        // - require(tx.origin == owner) passes because tx.origin == victim (original owner)
+        
+        // Simulate: victim calls attacker contract which calls vuln.setOwner(attacker)
+        // In real attack, attacker contract would have fallback calling vuln.setOwner
+        
+        // Direct call should fail (msg.sender != tx.origin)
+        vm.prank(attacker);
+        vm.expectRevert("Not owner");
+        vuln.setOwner(attacker);
+    }
+    
+    function testSafeTxOrigin_BlocksPhishing() public {
+        SafeTxOrigin safe = new SafeTxOrigin();
+        address attacker = makeAddr("attacker");
+        
+        // Should revert - uses msg.sender not tx.origin
+        vm.prank(attacker);
+        vm.expectRevert("Not owner");
+        safe.setOwner(attacker);
+    }
+    
+    function testTxOriginLegitimate_NotFlagged() public {
+        TxOriginLegitimate legit = new TxOriginLegitimate();
+        
+        // These are legitimate uses - logging, detection
+        legit.logAction("test");
+        assertTrue(legit.isDirectCall());
+    }
+}

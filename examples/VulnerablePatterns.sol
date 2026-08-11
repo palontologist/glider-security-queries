@@ -455,3 +455,96 @@ contract SafeOracle {
         return (uint256(price1) + uint256(price2)) / 2;
     }
 }
+
+
+// ============================================
+// TX.ORIGIN AUTHENTICATION EXAMPLES
+// ============================================
+
+contract VulnerableTxOrigin {
+    address public owner;
+    
+    constructor() {
+        owner = msg.sender;
+    }
+    
+    // VULNERABLE: Using tx.origin for authentication
+    function setOwner(address newOwner) external {
+        require(tx.origin == owner, "Not owner");  // PHISHING VULNERABLE!
+        owner = newOwner;
+    }
+    
+    // VULNERABLE: tx.origin in authorization
+    function withdraw() external {
+        require(tx.origin == owner, "Not authorized");
+        payable(owner).transfer(address(this).balance);
+    }
+    
+    // VULNERABLE: tx.origin for access control
+    function adminAction() external {
+        if (tx.origin != owner) {
+            revert("Not admin");
+        }
+        // Admin logic
+    }
+    
+    // VULNERABLE: Setting owner via tx.origin in non-constructor
+    function transferOwnershipTxOrigin(address newOwner) external {
+        require(tx.origin == owner, "Not owner");
+        owner = newOwner;
+    }
+}
+
+contract SafeTxOrigin {
+    address public owner;
+    
+    constructor() {
+        owner = msg.sender;  // SAFE: constructor uses msg.sender
+    }
+    
+    // SAFE: Using msg.sender for authentication
+    function setOwner(address newOwner) external {
+        require(msg.sender == owner, "Not owner");
+        owner = newOwner;
+    }
+    
+    // SAFE: msg.sender in authorization
+    function withdraw() external {
+        require(msg.sender == owner, "Not authorized");
+        payable(owner).transfer(address(this).balance);
+    }
+    
+    // SAFE: Ownable pattern with msg.sender
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Not owner");
+        _;
+    }
+    
+    function adminAction() external onlyOwner {
+        // Admin logic
+    }
+    
+    // SAFE: Proper ownership transfer
+    function transferOwnership(address newOwner) external onlyOwner {
+        owner = newOwner;
+    }
+}
+
+
+// ============================================
+// TX.ORIGIN FALSE POSITIVE CASES (Legitimate uses)
+// ============================================
+
+contract TxOriginLegitimate {
+    // LEGITIMATE: Logging tx.origin for analytics
+    event UserAction(address indexed user, address indexed origin, string action);
+    
+    function logAction(string calldata action) external {
+        emit UserAction(msg.sender, tx.origin, action);  // Not auth - just logging
+    }
+    
+    // LEGITIMATE: Checking if called directly vs via contract
+    function isDirectCall() external view returns (bool) {
+        return msg.sender == tx.origin;  // Not auth - just detection
+    }
+}
