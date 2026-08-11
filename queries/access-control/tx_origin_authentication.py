@@ -11,44 +11,35 @@ def query():
     @references: https://swcregistry.io/docs/SWC-115/, https://consensys.github.io/smart-contract-best-practices/attacks/tx-origin/
     """
 
+    # Use Functions() to find functions containing tx.origin - more efficient
     return (
-        Instructions()
+        Functions()
         .exec()
-        .filter(lambda i: "tx.origin" in str(i))
-        .filter(is_authentication_check)
-        .filter(not_in_constructor)
+        .filter(function_uses_tx_origin_for_auth)
     )
 
 
-def is_authentication_check(inst):
-    """Check if tx.origin is used in an authentication/authorization context"""
-    code_str = str(inst)
+def function_uses_tx_origin_for_auth(func):
+    """Check if function uses tx.origin in auth context"""
+    code = str(func)
+    if "tx.origin" not in code:
+        return False
     
-    # Check if it's a comparison/assignment involving tx.origin
-    if any(op in code_str for op in ["==", "!=", "=", "<", ">"]):
-        return True
+    # Check for auth patterns in function
+    auth_patterns = [
+        "tx.origin ==",
+        "tx.origin !=",
+        "tx.origin =",
+        "require(",
+        "assert(",
+    ]
     
-    # Check if used in require/assert condition
-    if "require" in inst.callee_names() or "assert" in inst.callee_names():
-        return True
-    
-    # Check if used in if condition
-    if inst.is_if():
-        return True
-    
-    # Check if assigned to state variable
-    if inst.is_storage_write():
-        for var in inst.vars_written():
-            if any(kw in var.name.lower() for kw in ["owner", "admin", "auth"]):
-                return True
-    
-    return False
+    return any(pattern in code for pattern in auth_patterns)
 
 
-def not_in_constructor(inst):
-    """Filter out constructor usage (sometimes acceptable)"""
-    func = inst.get_parent()
-    return func is not None and not func.is_constructor()
+def not_in_constructor(func):
+    """Filter out constructor"""
+    return not func.is_constructor()
 
 
 def query_simple():
@@ -58,7 +49,7 @@ def query_simple():
     @tags: tx-origin
     """
     return (
-        Instructions()
+        Functions()
         .exec()
-        .filter(lambda i: "tx.origin" in str(i))
+        .filter(lambda f: "tx.origin" in str(f))
     )
