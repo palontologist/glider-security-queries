@@ -14,7 +14,7 @@ def query():
     return (
         Instructions()
         .exec()
-        .filter(lambda i: "tx.origin" in str(i.get_code()) if i.get_code() else False)
+        .filter(lambda i: "tx.origin" in str(i))
         .filter(is_authentication_check)
         .filter(not_in_constructor)
     )
