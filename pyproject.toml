@@ -1,0 +1,51 @@
+[project]
+name = "glider-security-queries"
+version = "1.0.0"
+description = "Curated Glider queries for smart contract vulnerability detection"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Security Researcher"}]
+keywords = ["glider", "solidity", "smart-contracts", "security", "static-analysis", "bug-bounty", "vulnerability-detection"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Security",
+    "Topic :: Software Development :: Quality Assurance",
+]
+requires-python = ">=3.11"
+dependencies = [
+    "glider>=0.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["*_test.py", "test_*.py"]
+python_functions = ["test_*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+lint.select = ["E", "F", "I", "W", "UP", "B", "C4", "PIE", "T20", "PYI"]
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+include = '\.py$'
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["queries*"]

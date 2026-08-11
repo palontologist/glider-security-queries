@@ -1,0 +1,99 @@
+from glider import *
+
+
+def query():
+    """
+    @title: Proxy upgrade without initialization validation
+    @description: Detects proxy upgrade functions that don't validate initialization delegatecalls.
+                  Critical for UUPS, Transparent, and Diamond proxy patterns.
+    @tags: proxy, upgradeable, initialization, delegatecall
+    @references: https://docs.openzeppelin.com/contracts/4.x/api/proxy, https://eips.ethereum.org/EIPS/eip-1822
+    """
+
+    return (
+        Functions()
+        .filter(lambda f: any(kw in f.name.lower() for kw in ["upgrade", "setimplementation", "changeimplementation", "setfacet"]))
+        .exec()
+        .filter(missing_initialization_validation)
+    )
+
+
+def missing_initialization_validation(func):
+    """Check if proxy upgrade validates initialization"""
+    has_delegatecall = False
+    has_init_validation = False
+    
+    for inst in func.instructions().exec():
+        if inst.is_delegate_call():
+            has_delegatecall = True
+            dest = inst.get_dest()
+            
+            # Track if delegatecall return is validated
+            if dest:
+                success_vars = []
+                if isinstance(dest, VarValue):
+                    success_vars = [dest]
+                elif hasattr(dest, 'get_components'):
+                    for comp in dest.get_components():
+                        vars = comp.get_vars()
+                        if vars:
+                            success_vars.extend(vars)
+                
+                for var in success_vars:
+                    usages = var.forward_df_recursive().filter(lambda p: isinstance(p, Instruction)).exec()
+                    for usage in usages:
+                        if validates_call_result(usage):
+                            has_init_validation = True
+                            break
+    
+    # If there's a delegatecall but no validation, it's vulnerable
+    return has_delegatecall and not has_init_validation
+
+
+def validates_call_result(inst):
+    callee_names = inst.callee_names()
+    if "require" in callee_names or "assert" in callee_names:
+        return True
+    oz_validators = ["verifyCallResult", "verifyCallResultFromTarget", "_verifyCallResult"]
+    if any(v in callee_names for v in oz_validators):
+        return True
+    if inst.is_if():
+        true_branch = inst.first_true_instruction()
+        false_branch = inst.first_false_instruction()
+        if true_branch and "revert" in true_branch.builtin_callee_names():
+            return True
+        if false_branch and "revert" in false_branch.builtin_callee_names():
+            return True
+    if "revert" in inst.builtin_callee_names():
+        return True
+    return False
+
+
+def query_diamond_facet():
+    """
+    @title: Diamond facet replacement without validation
+    @description: Detects diamondCut/facet replacement without proper validation
+    @tags: diamond, proxy, facet, eip2535
+    """
+    return (
+        Functions()
+        .filter(lambda f: "diamondcut" in f.name.lower() or "setfacet" in f.name.lower() or "replacefacet" in f.name.lower())
+        .exec()
+        .filter(missing_facet_validation)
+    )
+
+
+def missing_facet_validation(func):
+    """Check if diamond facet change validates facet address"""
+    has_validation = False
+    
+    for inst in func.instructions().exec():
+        # Check for address validation (non-zero, valid facet)
+        if inst.is_if():
+            for var in inst.vars_read():
+                if "facet" in var.name.lower() or "address" in var.name.lower():
+                    # Check if comparing to zero address
+                    if "0x0" in str(inst) or "address(0)" in str(inst):
+                        has_validation = True
+    
+    return not has_validation
