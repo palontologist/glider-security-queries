@@ -24,9 +24,10 @@ def query():
 
     return (
         Instructions()
-        .filter(lambda i: i.is_storage_write())
-        .exec()
+        .exec()  # Get all instructions
+        .filter(lambda i: i.get_parent() is not None)  # Has parent function
         .filter(lambda i: any(sensitive in i.get_parent().name for sensitive in sensitive_functions))
+        .filter(lambda i: i.is_storage_write())  # State-changing instructions
         .filter(missing_access_control)
     )
 
