@@ -24,16 +24,16 @@ def query():
 
     return (
         Instructions()
-        .filter(lambda i: i.is_function_definition())
-        .filter(lambda i: any(sensitive in i.get_parent_function().name for sensitive in sensitive_functions))
+        .filter(lambda i: i.is_storage_write())
         .exec()
+        .filter(lambda i: any(sensitive in i.get_parent().name for sensitive in sensitive_functions))
         .filter(missing_access_control)
     )
 
 
 def missing_access_control(inst):
     """Check if function lacks proper access control"""
-    func = inst.get_parent_function()
+    func = inst.get_parent()
     modifiers = [m.name for m in func.modifiers()]
     
     # Common access control modifiers
