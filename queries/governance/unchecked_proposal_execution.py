@@ -11,16 +11,18 @@ def query():
     """
 
     return (
-        Functions()
-        .filter(lambda f: "execute" in f.name.lower() or "queue" in f.name.lower())
-        .filter(lambda f: "proposal" in str(f.parameters()).lower() or "target" in str(f.parameters()).lower())
+        Instructions()
+        .filter(lambda i: i.is_function_definition())
+        .filter(lambda i: "execute" in i.get_parent_function().name.lower() or "queue" in i.get_parent_function().name.lower())
+        .filter(lambda i: "proposal" in str(i.get_parent_function().parameters()).lower() or "target" in str(i.get_parent_function().parameters()).lower())
         .exec()
         .filter(missing_governance_validation)
     )
 
 
-def missing_governance_validation(func):
+def missing_governance_validation(inst):
     """Check if governance execution lacks proper validation"""
+    func = inst.get_parent_function()
     validations_found = {
         "quorum": False,
         "voting_period": False,
@@ -29,9 +31,9 @@ def missing_governance_validation(func):
         "signature_verification": False
     }
     
-    for inst in func.instructions().exec():
-        callee_names = inst.callee_names()
-        vars_read = [v.name for v in inst.vars_read()]
+    for fn_inst in func.instructions().exec():
+        callee_names = fn_inst.callee_names()
+        vars_read = [v.name for v in fn_inst.vars_read()]
         
         # Check for quorum validation
         if any("quorum" in v.lower() for v in vars_read):

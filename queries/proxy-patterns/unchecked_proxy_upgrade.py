@@ -11,22 +11,24 @@ def query():
     """
 
     return (
-        Functions()
-        .filter(lambda f: any(kw in f.name.lower() for kw in ["upgrade", "setimplementation", "changeimplementation", "setfacet"]))
+        Instructions()
+        .filter(lambda i: i.is_function_definition())
+        .filter(lambda i: any(kw in i.get_parent_function().name.lower() for kw in ["upgrade", "setimplementation", "changeimplementation", "setfacet"]))
         .exec()
         .filter(missing_initialization_validation)
     )
 
 
-def missing_initialization_validation(func):
+def missing_initialization_validation(inst):
     """Check if proxy upgrade validates initialization"""
+    func = inst.get_parent_function()
     has_delegatecall = False
     has_init_validation = False
     
-    for inst in func.instructions().exec():
-        if inst.is_delegate_call():
+    for fn_inst in func.instructions().exec():
+        if fn_inst.is_delegate_call():
             has_delegatecall = True
-            dest = inst.get_dest()
+            dest = fn_inst.get_dest()
             
             # Track if delegatecall return is validated
             if dest:
@@ -76,24 +78,26 @@ def query_diamond_facet():
     @tags: diamond, proxy, facet, eip2535
     """
     return (
-        Functions()
-        .filter(lambda f: "diamondcut" in f.name.lower() or "setfacet" in f.name.lower() or "replacefacet" in f.name.lower())
+        Instructions()
+        .filter(lambda i: i.is_function_definition())
+        .filter(lambda i: "diamondcut" in i.get_parent_function().name.lower() or "setfacet" in i.get_parent_function().name.lower() or "replacefacet" in i.get_parent_function().name.lower())
         .exec()
         .filter(missing_facet_validation)
     )
 
 
-def missing_facet_validation(func):
+def missing_facet_validation(inst):
     """Check if diamond facet change validates facet address"""
+    func = inst.get_parent_function()
     has_validation = False
     
-    for inst in func.instructions().exec():
+    for fn_inst in func.instructions().exec():
         # Check for address validation (non-zero, valid facet)
-        if inst.is_if():
-            for var in inst.vars_read():
+        if fn_inst.is_if():
+            for var in fn_inst.vars_read():
                 if "facet" in var.name.lower() or "address" in var.name.lower():
                     # Check if comparing to zero address
-                    if "0x0" in str(inst) or "address(0)" in str(inst):
+                    if "0x0" in str(fn_inst) or "address(0)" in str(fn_inst):
                         has_validation = True
     
     return not has_validation

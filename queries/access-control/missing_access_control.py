@@ -23,15 +23,17 @@ def query():
     ]
 
     return (
-        Functions()
-        .filter(lambda f: any(sensitive in f.name for sensitive in sensitive_functions))
+        Instructions()
+        .filter(lambda i: i.is_function_definition())
+        .filter(lambda i: any(sensitive in i.get_parent_function().name for sensitive in sensitive_functions))
         .exec()
         .filter(missing_access_control)
     )
 
 
-def missing_access_control(func):
+def missing_access_control(inst):
     """Check if function lacks proper access control"""
+    func = inst.get_parent_function()
     modifiers = [m.name for m in func.modifiers()]
     
     # Common access control modifiers
@@ -45,12 +47,12 @@ def missing_access_control(func):
     
     # Check for inline require checks
     has_inline_check = False
-    for inst in func.instructions().exec():
-        if inst.is_if() or "require" in inst.callee_names():
+    for fn_inst in func.instructions().exec():
+        if fn_inst.is_if() or "require" in fn_inst.callee_names():
             # Check if condition involves msg.sender and owner/admin
-            for var in inst.vars_read():
+            for var in fn_inst.vars_read():
                 if "owner" in var.name.lower() or "admin" in var.name.lower() or "role" in var.name.lower():
-                    if "msg.sender" in str(inst) or "sender" in var.name.lower():
+                    if "msg.sender" in str(fn_inst) or "sender" in var.name.lower():
                         has_inline_check = True
                         break
     
